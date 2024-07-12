@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Animated Timer with Custom Model</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+        #gui { position: absolute; top: 10px; right: 10px; }
+        #timer {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 48px;
+            color: white;
+            font-family: Arial, sans-serif;
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 10px;
+        }
+        .event-form {
+            margin-bottom: 20px;
+        }
+        .event-form input, .event-form button, .event-form select {
+            margin: 5px 0;
+            width: 100%;
+            padding: 5px;
+        }
+        .calendar {
+            display: grid;
+            grid-template-columns: 50px repeat(7, 1fr);
+            gap: 1px;
+            background-color: #ddd;
+        }
+        .calendar-header, .time-slot, .day-slot {
+            background-color: #fff;
+            padding: 5px;
+            text-align: center;
+        }
+        .calendar-header {
+            font-weight: bold;
+        }
+        .time-slot {
+            grid-column: 1;
+        }
+        .event-block {
+            background-color: #a0c4ff;
+            border-radius: 4px;
+            padding: 2px 5px;
+            font-size: 12px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <div id="scheduler">
+        <h2>Weekly Scheduler</h2>
+        <div class="event-form">
+            <input type="text" id="event-name" placeholder="Event Name">
+            <select id="event-day">
+                <option value="0">Sunday</option>
+                <option value="1">Monday</option>
+                <option value="2">Tuesday</option>
+                <option value="3">Wednesday</option>
+                <option value="4">Thursday</option>
+                <option value="5">Friday</option>
+                <option value="6">Saturday</option>
+            </select>
+            <input type="time" id="event-start" required>
+            <input type="time" id="event-end" required>
+            <button id="add-event">Add Event</button>
+        </div>
+        <div id="calendar" class="calendar"></div>
+    </div>
+    <div id="timer-container">
+        <div id="timer">00:00:00</div>
+    </div>
+    <div id="gui">
+        <select id="animationSelect"></select>
+        <button id="playPause">Play/Pause</button>
+    </div>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/"
+            }
+        }
+    </script>      
+    <script type="module">
+        // Three.js scene setup
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // Add orbit controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; // Add smooth damping effect
+        controls.dampingFactor = 0.25;
+
+        // Add lighting
+        const ambientLight = new THREE.AmbientLight(0x404040); // Soft white light
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        directionalLight.position.set(1, 1, 1).normalize();
+        scene.add(directionalLight);
+
+        // mixer for animations
+        let mixer;
+        let animationActions = [];
+        let activeAction;
+        let lastAction;
+
+        // Load custom 3D model
+        const loader = new GLTFLoader();
+        loader.load(
+            '/models/hilda/scene.gltf', // Replace with actual model URL
+            function (gltf) {
+                const model = gltf.scene;
+                scene.add(model);
+
+                // Center the model
+                const box = new THREE.Box3().setFromObject(model);
+                const center = box.getCenter(new THREE.Vector3());
+                model.position.sub(center);
+
+                // Adjust the camera to fit the model
+                const size = box.getSize(new THREE.Vector3());
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const fov = camera.fov * (Math.PI / 180);
+                let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2));
+                camera.position.z = cameraZ * 3; // Adjust this multiplier as needed
+
+                // Update the orbit controls
+                controls.target.set(0, 0, 0);
+                controls.update();
+                
+                // Set up animation
+                mixer = new THREE.AnimationMixer(model);
+                gltf.animations.forEach((clip) => {
+                    const action = mixer.clipAction(clip);
+                    animationActions.push(action);
+                    updateAnimationList(clip.name);
+                });
+            },
+            undefined,
+            function (error) {
+                console.error('An error happened', error);
+            }
+        );
+
+        camera.position.z = 5;
+
+        // Timer logic
+        let time = 0;
+        const timerElement = document.getElementById('timer');
+
+        function updateTimer() {
+            const hours = Math.floor(time / 3600);
+            const minutes = Math.floor((time % 3600) / 60);
+            const seconds = time % 60;
+            timerElement.textContent = 
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            time++;
+        }
+        
+        // Animation loop
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); // Required if controls.enableDamping = true
+            if (mixer) {
+                mixer.update(clock.getDelta());
+            }
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Animation controls
+        const animationSelect = document.getElementById('animationSelect');
+        const playPauseButton = document.getElementById('playPause');
+
+        function updateAnimationList(name) {
+            const option = document.createElement('option');
+            option.text = name;
+            animationSelect.add(option);
+        }
+
+        animationSelect.addEventListener('change', function() {
+            const selectedAnimation = animationActions[this.selectedIndex];
+            setAction(selectedAnimation);
+        });
+
+        playPauseButton.addEventListener('click', function() {
+            if (activeAction) {
+                if (activeAction.isRunning()) {
+                    activeAction.stop();
+                } else {
+                    activeAction.play();
+                }
+            }
+        });
+
+        function setAction(action) {
+            if (action !== activeAction) {
+                lastAction = activeAction;
+                activeAction = action;
+                lastAction.fadeOut(0.5);
+                activeAction.reset();
+                activeAction.fadeIn(0.5);
+                activeAction.play();
+            }
+        }
+
+        setInterval(updateTimer, 1000);
+
+        // Scheduler logic
+        const calendar = document.getElementById('calendar');
+        const addEventButton = document.getElementById('add-event');
+        const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+        const hours = Array.from({length: 12}, (_, i) => i + 7); // 7 AM to 6 PM
+
+        // Create calendar grid
+        function createCalendarGrid() {
+            calendar.innerHTML = ''; // Clear existing content
+            
+            // Add header
+            calendar.innerHTML += '<div class="calendar-header"></div>'; // Empty cell for time column
+            days.forEach(day => {
+                calendar.innerHTML += `<div class="calendar-header">${day}</div>`;
+            });
+
+            // Add time slots and day slots
+            hours.forEach(hour => {
+                calendar.innerHTML += `<div class="time-slot">${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}</div>`;
+                for (let i = 0; i < 7; i++) {
+                    calendar.innerHTML += `<div class="day-slot" data-day="${i}" data-hour="${hour}"></div>`;
+                }
+            });
+        }
+
+        createCalendarGrid();
+
+        // Add event to calendar
+        addEventButton.addEventListener('click', function() {
+            const eventName = document.getElementById('event-name').value;
+            const eventDay = parseInt(document.getElementById('event-day').value);
+            const eventStart = document.getElementById('event-start').value;
+            const eventEnd = document.getElementById('event-end').value;
+
+            if (eventName && eventStart && eventEnd) {
+                const startHour = parseInt(eventStart.split(':')[0]);
+                const endHour = parseInt(eventEnd.split(':')[0]);
+                const duration = endHour - startHour;
+
+                const eventBlock = document.createElement('div');
+                eventBlock.className = 'event-block';
+                eventBlock.textContent = eventName;
+                eventBlock.style.gridRow = `span ${duration}`;
+
+                const startSlot = calendar.querySelector(`[data-day="${eventDay}"][data-hour="${startHour}"]`);
+                if (startSlot) {
+                    startSlot.appendChild(eventBlock);
+                }
+
+                // Clear input fields
+                document.getElementById('event-name').value = '';
+                document.getElementById('event-start').value = '';
+                document.getElementById('event-end').value = '';
+            }
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', onWindowResize, false);
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+    </script>
+</body>
+</html>

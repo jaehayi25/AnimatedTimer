@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Calendar with Full-Screen Three.js Simulation</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        .container {
+            display: flex;
+            height: 100%;
+        }
+        .calendar-container {
+            width: 340px;
+            height: 100%;
+            overflow-y: auto;
+            background-color: #f0f0f0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .calendar {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        .date {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .events {
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        .event {
+            border-radius: 5px;
+            padding: 10px;
+            font-size: 14px;
+            box-sizing: border-box;
+            overflow: hidden;
+            position: absolute;
+            width: 100%;
+            left: 0;
+            color: white;
+        }
+        .add-event, .color-palette {
+            margin-top: 20px;
+        }
+        input, button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #color-inputs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        #color-inputs input[type="color"] {
+            width: 50px;
+            height: 50px;
+            padding: 0;
+            border: none;
+        }
+        #simulation-container {
+            flex-grow: 1;
+            height: 100%;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="calendar-container">
+            <div class="calendar">
+                <div class="date" id="current-date"></div>
+                <div class="events" id="events-list"></div>
+                <div class="add-event">
+                    <input type="text" id="event-name" placeholder="Event name">
+                    <input type="time" id="event-start-time">
+                    <input type="time" id="event-end-time">
+                    <button onclick="addEvent()">Add Event</button>
+                </div>
+                <div class="color-palette">
+                    <h3>Color Palette</h3>
+                    <div id="color-inputs"></div>
+                    <button onclick="addColorInput()">Add Color</button>
+                </div>
+            </div>
+        </div>
+        <div id="simulation-container"></div>
+    </div>
+
+    <script>
+        const currentDate = new Date();
+        document.getElementById('current-date').textContent = currentDate.toDateString();
+
+        let colorPalette = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'];
+
+        function timeToMinutes(time) {
+            const [hours, minutes] = time.split(':').map(Number);
+            return hours * 60 + minutes;
+        }
+
+        function minutesToPixels(minutes) {
+            return minutes * 0.5; // 1 minute = 0.5px
+        }
+
+        function getRandomColor() {
+            return colorPalette[Math.floor(Math.random() * colorPalette.length)];
+        }
+
+        function addEvent() {
+            const eventName = document.getElementById('event-name').value;
+            const startTime = document.getElementById('event-start-time').value;
+            const endTime = document.getElementById('event-end-time').value;
+            
+            if (eventName && startTime && endTime) {
+                const eventsList = document.getElementById('events-list');
+                const eventElement = document.createElement('div');
+                eventElement.className = 'event';
+                
+                const startMinutes = timeToMinutes(startTime);
+                const endMinutes = timeToMinutes(endTime);
+                const duration = endMinutes - startMinutes;
+                
+                eventElement.style.height = `${Math.max(minutesToPixels(duration), 30)}px`;
+                eventElement.style.backgroundColor = getRandomColor();
+                eventElement.innerHTML = `<strong>${startTime} - ${endTime}</strong>: ${eventName}`;
+                eventElement.dataset.startTime = startTime;
+                eventElement.dataset.endTime = endTime;
+                
+                eventsList.appendChild(eventElement);
+                
+                updateCalendarLayout();
+
+                // Clear input fields
+                document.getElementById('event-name').value = '';
+                document.getElementById('event-start-time').value = '';
+                document.getElementById('event-end-time').value = '';
+            } else {
+                alert('Please enter event name, start time, and end time.');
+            }
+        }
+
+        function updateCalendarLayout() {
+            const eventsList = document.getElementById('events-list');
+            const events = Array.from(eventsList.children);
+            
+            events.sort((a, b) => timeToMinutes(a.dataset.startTime) - timeToMinutes(b.dataset.startTime));
+            
+            let totalHeight = 0;
+            let previousEndTime = 0;
+
+            events.forEach((event, index) => {
+                const startMinutes = timeToMinutes(event.dataset.startTime);
+                const endMinutes = timeToMinutes(event.dataset.endTime);
+                
+                if (index === 0) {
+                    event.style.top = '0px';
+                } else {
+                    const gap = startMinutes - previousEndTime;
+                    const gapHeight = minutesToPixels(gap);
+                    event.style.top = `${totalHeight + gapHeight}px`;
+                    totalHeight += gapHeight;
+                }
+                
+                totalHeight += parseFloat(event.style.height);
+                previousEndTime = endMinutes;
+            });
+
+            eventsList.style.height = `${totalHeight}px`;
+        }
+
+        function addColorInput() {
+            const colorInputs = document.getElementById('color-inputs');
+            const input = document.createElement('input');
+            input.type = 'color';
+            input.value = getRandomColor();
+            input.addEventListener('change', updateColorPalette);
+            colorInputs.appendChild(input);
+            updateColorPalette();
+        }
+
+        function updateColorPalette() {
+            const inputs = document.querySelectorAll('#color-inputs input');
+            colorPalette = Array.from(inputs).map(input => input.value);
+        }
+
+        // Initialize color inputs
+        colorPalette.forEach(() => addColorInput());
+
+        // Three.js simulation
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        document.getElementById('simulation-container').appendChild(renderer.domElement);
+
+        const geometry = new THREE.BoxGeometry();
+        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const cube = new THREE.Mesh(geometry, material);
+        scene.add(cube);
+
+        camera.position.z = 5;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            cube.rotation.x += 0.01;
+            cube.rotation.y += 0.01;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Handle window resize
+        function resizeSimulation() {
+            const container = document.getElementById('simulation-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+
+        window.addEventListener('resize', resizeSimulation);
+        resizeSimulation(); // Initial size setup
+    </script>
+</body>
+</html>
