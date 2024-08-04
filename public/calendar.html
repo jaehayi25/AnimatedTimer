@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dynamic Calendar with Full-Screen Three.js Simulation</title>
+    <title>Drag-to-Create Calendar with Three.js Simulation</title>
     <style>
         body, html {
             margin: 0;
@@ -29,56 +29,35 @@
             border-radius: 10px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
             padding: 20px;
+            position: relative;
         }
         .date {
             font-size: 24px;
             font-weight: bold;
             margin-bottom: 20px;
         }
-        .events {
-            display: flex;
-            flex-direction: column;
+        .time-grid {
             position: relative;
+            height: 1440px; /* 24 hours * 60 pixels per hour */
+        }
+        .hour-marker {
+            position: absolute;
+            width: 100%;
+            border-top: 1px solid #ddd;
+            color: #888;
+            font-size: 12px;
         }
         .event {
+            position: absolute;
+            left: 40px;
+            right: 0;
+            background-color: #4CAF50;
             border-radius: 5px;
-            padding: 10px;
+            padding: 5px;
             font-size: 14px;
             box-sizing: border-box;
             overflow: hidden;
-            position: absolute;
-            width: 100%;
-            left: 0;
             color: white;
-        }
-        .add-event, .color-palette {
-            margin-top: 20px;
-        }
-        input, button {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            box-sizing: border-box;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        #color-inputs {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-        }
-        #color-inputs input[type="color"] {
-            width: 50px;
-            height: 50px;
-            padding: 0;
-            border: none;
         }
         #simulation-container {
             flex-grow: 1;
@@ -92,18 +71,7 @@
         <div class="calendar-container">
             <div class="calendar">
                 <div class="date" id="current-date"></div>
-                <div class="events" id="events-list"></div>
-                <div class="add-event">
-                    <input type="text" id="event-name" placeholder="Event name">
-                    <input type="time" id="event-start-time">
-                    <input type="time" id="event-end-time">
-                    <button onclick="addEvent()">Add Event</button>
-                </div>
-                <div class="color-palette">
-                    <h3>Color Palette</h3>
-                    <div id="color-inputs"></div>
-                    <button onclick="addColorInput()">Add Color</button>
-                </div>
+                <div class="time-grid" id="time-grid"></div>
             </div>
         </div>
         <div id="simulation-container"></div>
@@ -114,99 +82,74 @@
         document.getElementById('current-date').textContent = currentDate.toDateString();
 
         let colorPalette = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'];
-
-        function timeToMinutes(time) {
-            const [hours, minutes] = time.split(':').map(Number);
-            return hours * 60 + minutes;
-        }
-
-        function minutesToPixels(minutes) {
-            return minutes * 0.5; // 1 minute = 0.5px
-        }
+        let isDragging = false;
+        let startY, endY;
 
         function getRandomColor() {
-            return colorPalette[Math.floor(Math.random() * colorPalette.length)];
+            var letters = '0123456789ABCDEF';
+            var color = '#';
+            for (var i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
         }
 
-        function addEvent() {
-            const eventName = document.getElementById('event-name').value;
-            const startTime = document.getElementById('event-start-time').value;
-            const endTime = document.getElementById('event-end-time').value;
-            
-            if (eventName && startTime && endTime) {
-                const eventsList = document.getElementById('events-list');
-                const eventElement = document.createElement('div');
-                eventElement.className = 'event';
-                
-                const startMinutes = timeToMinutes(startTime);
-                const endMinutes = timeToMinutes(endTime);
-                const duration = endMinutes - startMinutes;
-                
-                eventElement.style.height = `${Math.max(minutesToPixels(duration), 30)}px`;
-                eventElement.style.backgroundColor = getRandomColor();
-                eventElement.innerHTML = `<strong>${startTime} - ${endTime}</strong>: ${eventName}`;
-                eventElement.dataset.startTime = startTime;
-                eventElement.dataset.endTime = endTime;
-                
-                eventsList.appendChild(eventElement);
-                
-                updateCalendarLayout();
-
-                // Clear input fields
-                document.getElementById('event-name').value = '';
-                document.getElementById('event-start-time').value = '';
-                document.getElementById('event-end-time').value = '';
-            } else {
-                alert('Please enter event name, start time, and end time.');
+        function createTimeGrid() {
+            const timeGrid = document.getElementById('time-grid');
+            for (let i = 0; i < 24; i++) {
+                const hourMarker = document.createElement('div');
+                hourMarker.className = 'hour-marker';
+                hourMarker.style.top = `${i * 60}px`;
+                hourMarker.textContent = `${i}:00`;
+                timeGrid.appendChild(hourMarker);
             }
         }
 
-        function updateCalendarLayout() {
-            const eventsList = document.getElementById('events-list');
-            const events = Array.from(eventsList.children);
-            
-            events.sort((a, b) => timeToMinutes(a.dataset.startTime) - timeToMinutes(b.dataset.startTime));
-            
-            let totalHeight = 0;
-            let previousEndTime = 0;
+        function pixelsToTime(pixels) {
+            const hours = Math.floor(pixels / 60);
+            const minutes = pixels % 60;
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        }
 
-            events.forEach((event, index) => {
-                const startMinutes = timeToMinutes(event.dataset.startTime);
-                const endMinutes = timeToMinutes(event.dataset.endTime);
-                
-                if (index === 0) {
-                    event.style.top = '0px';
-                } else {
-                    const gap = startMinutes - previousEndTime;
-                    const gapHeight = minutesToPixels(gap);
-                    event.style.top = `${totalHeight + gapHeight}px`;
-                    totalHeight += gapHeight;
+        function createEvent(start, end) {
+            const eventElement = document.createElement('div');
+            eventElement.className = 'event';
+            eventElement.style.top = `${start}px`;
+            eventElement.style.height = `${end - start}px`;
+            eventElement.style.backgroundColor = getRandomColor();
+            
+            const startTime = pixelsToTime(start);
+            const endTime = pixelsToTime(end);
+            eventElement.textContent = `${startTime} - ${endTime}`;
+            
+            document.getElementById('time-grid').appendChild(eventElement);
+        }
+
+        // Set up the time grid
+        createTimeGrid();
+
+        // Event listeners for drag-to-create functionality
+        const timeGrid = document.getElementById('time-grid');
+        timeGrid.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startY = e.clientY - timeGrid.getBoundingClientRect().top + timeGrid.scrollTop;
+        });
+
+        timeGrid.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                endY = e.clientY - timeGrid.getBoundingClientRect().top + timeGrid.scrollTop;
+                // You might want to add visual feedback here
+            }
+        });
+
+        timeGrid.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                if (startY !== endY) {
+                    createEvent(Math.min(startY, endY), Math.max(startY, endY));
                 }
-                
-                totalHeight += parseFloat(event.style.height);
-                previousEndTime = endMinutes;
-            });
-
-            eventsList.style.height = `${totalHeight}px`;
-        }
-
-        function addColorInput() {
-            const colorInputs = document.getElementById('color-inputs');
-            const input = document.createElement('input');
-            input.type = 'color';
-            input.value = getRandomColor();
-            input.addEventListener('change', updateColorPalette);
-            colorInputs.appendChild(input);
-            updateColorPalette();
-        }
-
-        function updateColorPalette() {
-            const inputs = document.querySelectorAll('#color-inputs input');
-            colorPalette = Array.from(inputs).map(input => input.value);
-        }
-
-        // Initialize color inputs
-        colorPalette.forEach(() => addColorInput());
+            }
+        });
 
         // Three.js simulation
         const scene = new THREE.Scene();
