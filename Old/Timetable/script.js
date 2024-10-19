@@ -1,3 +1,29 @@
+// Detect dragging
+
+const delta = 6;
+let startX;
+let startY;
+
+document.addEventListener('mousedown', function (event) {
+  startX = event.pageX;
+  startY = event.pageY;
+  console.log('Drag started at:', startX, startY);
+});
+
+document.addEventListener('mouseup', function (event) {
+  const diffX = Math.abs(event.pageX - startX);
+  const diffY = Math.abs(event.pageY - startY);
+
+  if (diffX < delta && diffY < delta) {
+    // Click!
+  }
+  else {
+    // 
+    console.log('Drag ended at:', event.pageX, event.pageY);
+  }
+});
+
+
 const svg = document.getElementById('timetable');
 const activities = [];
 
