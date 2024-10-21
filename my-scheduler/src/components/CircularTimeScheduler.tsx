@@ -138,6 +138,7 @@ const CircularTimeScheduler = () => {
           textAnchor="middle" 
           dominantBaseline="middle" 
           className="text-xs"
+          style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
         >
           {i}:00
         </text>
@@ -146,7 +147,7 @@ const CircularTimeScheduler = () => {
   });
 
   return (
-    <div className="flex flex-col items-center gap-8 p-4 min-h-screen bg-white">
+    <div className="flex flex-col items-center min-h-screen bg-white">
       {showNameInput && (
         <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-4 rounded-lg shadow-lg z-10">
           <form onSubmit={handleActivityNameSubmit} className="flex flex-col gap-4">
@@ -234,7 +235,7 @@ const CircularTimeScheduler = () => {
               className="w-4 h-4 rounded-full" 
               style={{ backgroundColor: activity.color }}
             />
-            <span>{activity.name} ({activity.startTime} - {activity.endTime})</span>
+            <span className="text-black">{activity.name} ({activity.startTime} - {activity.endTime})</span>
           </div>
         ))}
       </div>
